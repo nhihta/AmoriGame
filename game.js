@@ -5,7 +5,11 @@ const config = {
     height: 640,
     parent: document.body,
     transparent: true,
-    dom: { createContainer: false }, // Tắt DOM vì dùng Particle nội bộ
+    dom: { createContainer: false },
+
+    // Giữ độ nét cao cho màn hình điện thoại
+    resolution: window.devicePixelRatio,
+
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -20,9 +24,14 @@ const ROWS = 6;
 const COLS = 5;
 const CELL = 56;
 const GAP = 6;
+
+// Tính toán vị trí bàn cờ
 const BOARD_WIDTH = COLS * CELL + (COLS - 1) * GAP;
 const OFFSET_X = (360 - BOARD_WIDTH) / 2 + CELL / 2;
-const OFFSET_Y = 150 + CELL / 2;
+
+// --- THAY ĐỔI 1: KÉO BÀN CỜ LÊN CAO HƠN ---
+// Cũ: 150 -> Mới: 120 (Nhường 30px thêm cho phần dưới)
+const OFFSET_Y = 120 + CELL / 2;
 
 const TOTAL_TIME = 120;
 const BAR_WIDTH = 300;
@@ -83,20 +92,16 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create() {
-    // --- TẠO CÁC HẠT (TEXTURE) CHO HIỆU ỨNG ---
-
-    // 1. Flare (Đốm sáng tròn) - Dùng cho nổ
+    // TẠO TEXTURE HẠT
     if (!this.textures.exists('flare')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff); gfx.fillCircle(8, 8, 8);
         gfx.generateTexture('flare', 16, 16);
     }
 
-    // 2. Star (Hình thoi/sao) - Dùng cho hiệu ứng Magic
     if (!this.textures.exists('star')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff);
-        // Vẽ hình thoi
         gfx.beginPath();
         gfx.moveTo(8, 0); gfx.lineTo(16, 8); gfx.lineTo(8, 16); gfx.lineTo(0, 8);
         gfx.closePath();
@@ -154,7 +159,10 @@ function startGame() {
 
 // ================= UI FUNCTIONS =================
 function createBottomButtons() {
-    const btnY = 580;
+    // --- THAY ĐỔI 2: ĐẨY NÚT LÊN CAO HẲN ---
+    // Cũ: 580 -> Mới: 550 (Cách đáy 90px, cực kỳ an toàn cho mọi loại màn hình)
+    const btnY = 550;
+
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
@@ -171,7 +179,15 @@ function createSingleButton(x, y, textStr, color, onClick) {
     const bg = this.add.graphics();
     bg.fillStyle(color, 1); bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
     bg.lineStyle(2, 0xffffff, 1); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
-    const text = this.add.text(0, 0, textStr, { fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5);
+
+    // Giữ độ nét chữ
+    const text = this.add.text(0, 0, textStr, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fontStyle: 'bold',
+        color: '#ffffff'
+    }).setOrigin(0.5).setResolution(2);
+
     const zone = this.add.zone(0, 0, btnW, btnH).setInteractive({ useHandCursor: true });
     zone.on('pointerdown', () => {
         this.tweens.add({ targets: container, scaleX: 0.9, scaleY: 0.9, duration: 100, yoyo: true, onComplete: onClick });
@@ -180,9 +196,9 @@ function createSingleButton(x, y, textStr, color, onClick) {
 }
 
 function createUI() {
-    this.add.text(20, 40, 'Score', { fontSize: '24px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0, 0.5);
+    this.add.text(20, 40, 'Score', { fontSize: '24px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0, 0.5).setResolution(2);
     const scoreBg = this.add.graphics(); scoreBg.fillStyle(0xc0392b, 1); scoreBg.fillRoundedRect(100, 23, 70, 34, 16);
-    scoreText = this.add.text(135, 40, '0', { fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5);
+    scoreText = this.add.text(135, 40, '0', { fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5).setResolution(2);
 
     const hintContainer = this.add.container(230, 23);
     const hintW = 110; const hintH = 36;
@@ -193,8 +209,8 @@ function createUI() {
     hitZone.on('pointerdown', () => useHint.call(this));
     hintContainer.add([hintBg, hitZone]);
     const iconBg = this.add.graphics(); iconBg.fillStyle(0xf1c40f, 1); iconBg.fillCircle(18, hintH / 2, 16); hintContainer.add(iconBg);
-    const iconText = this.add.text(18, hintH / 2, 'S', { fontSize: '20px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5); hintContainer.add(iconText);
-    hintText = this.add.text(65, hintH / 2, 'Hint: ' + MAX_HINT, { fontSize: '18px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5); hintContainer.add(hintText);
+    const iconText = this.add.text(18, hintH / 2, 'S', { fontSize: '20px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5).setResolution(2); hintContainer.add(iconText);
+    hintText = this.add.text(65, hintH / 2, 'Hint: ' + MAX_HINT, { fontSize: '18px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5, 0.5).setResolution(2); hintContainer.add(hintText);
 
     timeBarGfx = this.add.graphics(); drawTimeBar(this);
 }
@@ -238,7 +254,8 @@ function updateTime() {
         timeLeft--; drawTimeBar(this);
     } else {
         timerEvent.remove(); lock = true;
-        this.add.text(180, 320, 'GAME OVER', { fontSize: '40px', color: '#ff0000', backgroundColor: '#000', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(100);
+        this.add.text(180, 320, 'GAME OVER', { fontSize: '40px', color: '#ff0000', backgroundColor: '#000', padding: { x: 10, y: 10 } })
+            .setOrigin(0.5).setDepth(100).setResolution(2);
         this.sound.stopAll();
     }
 }
@@ -255,9 +272,8 @@ function flipCard(card) {
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
 
-            this.cameras.main.shake(300, 0.005);
+            this.cameras.main.shake(200, 0.005);
 
-            // --- GỌI HÀM RANDOM HIỆU ỨNG MỚI ---
             playRandomEffect(this, first.x, first.y);
             playRandomEffect(this, second.x, second.y);
 
@@ -266,7 +282,8 @@ function flipCard(card) {
 
             removePair(first, second);
             if (matchedPairs === 15) {
-                this.add.text(180, 320, 'YOU WIN!', { fontSize: '40px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(100);
+                this.add.text(180, 320, 'YOU WIN!', { fontSize: '40px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 10 } })
+                    .setOrigin(0.5).setDepth(100).setResolution(2);
                 timerEvent.remove();
                 this.sound.stopAll();
             }
@@ -281,23 +298,15 @@ function flipCard(card) {
 // ================= HỆ THỐNG HIỆU ỨNG RANDOM =================
 
 function playRandomEffect(scene, x, y) {
-    // Random số từ 1 đến 3
     const type = Phaser.Math.Between(1, 3);
-
     switch (type) {
-        case 1:
-            createFireworkEffect(scene, x, y);
-            break;
-        case 2:
-            createGalaxyEffect(scene, x, y);
-            break;
-        case 3:
-            createFountainEffect(scene, x, y);
-            break;
+        case 1: createFireworkEffect(scene, x, y); break;
+        case 2: createGalaxyEffect(scene, x, y); break;
+        case 3: createFountainEffect(scene, x, y); break;
     }
 }
 
-// 1. HIỆU ỨNG PHÁO HOA (Đỏ/Cam/Vàng - Rơi xuống)
+// 1. Pháo hoa
 function createFireworkEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'flare', {
         x: x, y: y,
@@ -306,44 +315,44 @@ function createFireworkEffect(scene, x, y) {
         scale: { start: 0.8, end: 0 },
         blendMode: 'ADD',
         lifespan: 600,
-        gravityY: 200, // Có trọng lực rơi xuống
+        gravityY: 200,
         quantity: 20,
-        tint: [0xff0000, 0xffa500, 0xffff00] // Đỏ - Cam - Vàng
+        tint: [0xff0000, 0xffa500, 0xffff00]
     });
     particles.explode(20, x, y);
     scene.time.delayedCall(700, () => particles.destroy());
 }
 
-// 2. HIỆU ỨNG GALAXY (Xanh/Tím - Xoay tròn)
+// 2. Galaxy
 function createGalaxyEffect(scene, x, y) {
-    const particles = scene.add.particles(0, 0, 'star', { // Dùng texture ngôi sao
+    const particles = scene.add.particles(0, 0, 'star', {
         x: x, y: y,
         speed: { min: 50, max: 120 },
         angle: { min: 0, max: 360 },
         scale: { start: 0.6, end: 0 },
-        rotate: { start: 0, end: 360 }, // Hạt tự xoay
+        rotate: { start: 0, end: 360 },
         blendMode: 'SCREEN',
         lifespan: 800,
-        gravityY: 0, // Không trọng lực
+        gravityY: 0,
         quantity: 15,
-        tint: [0x00ffff, 0xff00ff, 0x9b59b6] // Cyan - Tím - Hồng
+        tint: [0x00ffff, 0xff00ff, 0x9b59b6]
     });
     particles.explode(15, x, y);
     scene.time.delayedCall(900, () => particles.destroy());
 }
 
-// 3. HIỆU ỨNG FOUNTAIN (Xanh Lá/Trắng - Bắn lên trời)
+// 3. Fountain
 function createFountainEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'flare', {
         x: x, y: y,
         speed: { min: 150, max: 250 },
-        angle: { min: 240, max: 300 }, // Chỉ bắn lên trên
+        angle: { min: 240, max: 300 },
         scale: { start: 0.7, end: 0 },
         blendMode: 'ADD',
         lifespan: 700,
-        gravityY: 400, // Rơi xuống nhanh sau khi bắn lên
+        gravityY: 400,
         quantity: 15,
-        tint: [0x2ecc71, 0xaaffff, 0xffffff] // Xanh lá - Trắng xanh
+        tint: [0x2ecc71, 0xaaffff, 0xffffff]
     });
     particles.explode(15, x, y);
     scene.time.delayedCall(800, () => particles.destroy());
@@ -392,5 +401,4 @@ function useHint() {
             }
         }
     }
-
 }
