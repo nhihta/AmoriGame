@@ -5,7 +5,7 @@ const config = {
     height: 640,
     parent: document.body,
     transparent: true,
-    dom: { createContainer: false },
+    dom: { createContainer: false }, // Giữ nguyên false
 
     // Giữ độ nét cao cho màn hình điện thoại
     resolution: window.devicePixelRatio,
@@ -24,13 +24,8 @@ const ROWS = 6;
 const COLS = 5;
 const CELL = 56;
 const GAP = 6;
-
-// Tính toán vị trí bàn cờ
 const BOARD_WIDTH = COLS * CELL + (COLS - 1) * GAP;
 const OFFSET_X = (360 - BOARD_WIDTH) / 2 + CELL / 2;
-
-// --- THAY ĐỔI 1: KÉO BÀN CỜ LÊN CAO HƠN ---
-// Cũ: 150 -> Mới: 120 (Nhường 30px thêm cho phần dưới)
 const OFFSET_Y = 120 + CELL / 2;
 
 const TOTAL_TIME = 120;
@@ -64,7 +59,7 @@ function preload() {
     this.load.audio('wrong', 'assets/wrong.mp3');
 }
 
-// ================= HELPERS: XỬ LÝ ẢNH =================
+// ================= HELPERS =================
 function prepareBackFrames(scene) {
     if (!scene.textures.exists('backBig')) { createFallbackTexture(scene); return; }
     const texture = scene.textures.get('backBig');
@@ -92,20 +87,15 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create() {
-    // TẠO TEXTURE HẠT
     if (!this.textures.exists('flare')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff); gfx.fillCircle(8, 8, 8);
         gfx.generateTexture('flare', 16, 16);
     }
-
     if (!this.textures.exists('star')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff);
-        gfx.beginPath();
-        gfx.moveTo(8, 0); gfx.lineTo(16, 8); gfx.lineTo(8, 16); gfx.lineTo(0, 8);
-        gfx.closePath();
-        gfx.fill();
+        gfx.beginPath(); gfx.moveTo(8, 0); gfx.lineTo(16, 8); gfx.lineTo(8, 16); gfx.lineTo(0, 8); gfx.closePath(); gfx.fill();
         gfx.generateTexture('star', 16, 16);
     }
 
@@ -117,35 +107,58 @@ function create() {
     prepareBackFrames(this);
     createBoard.call(this);
 
+    // GỌI HÀM VIDEO (ĐÃ ĐƯỢC TỐI ƯU)
     handleStartScreen.call(this);
 }
 
-// --- XỬ LÝ INTRO ---
+// --- FIX LỖI LAG VIDEO: DÙNG OPACITY ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
 
     if (!startScreen || !introVideo) { startGame.call(this); return; }
 
+    // BẮT BUỘC: Ra lệnh cho trình duyệt tải video ngay lập tức
+    introVideo.load();
+
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
         startBtn.onclick = () => {
+            // Ẩn màn hình chờ
             startScreen.style.display = 'none';
-            introVideo.style.display = 'block';
+
+            // Hiện video NGAY LẬP TỨC bằng cách đổi Opacity và Z-Index
+            // Vì video đã nằm đó sẵn (không phải display:none) nên sẽ ko bị trễ
+            introVideo.style.opacity = '1';
+            introVideo.style.zIndex = '20000'; // Đưa lên trên cùng
+            introVideo.style.pointerEvents = 'auto';
+
             introVideo.currentTime = 0;
             introVideo.muted = false;
-            introVideo.play().catch(() => { removeIntroElements(); startGame.call(this); });
+
+            // Chạy video
+            var playPromise = introVideo.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Auto-play bị chặn, vào game luôn.");
+                    removeIntroElements();
+                    startGame.call(this);
+                });
+            }
         };
     }
 
-    introVideo.onended = () => { removeIntroElements(); startGame.call(this); };
+    introVideo.onended = () => {
+        removeIntroElements();
+        startGame.call(this);
+    };
 }
 
 function removeIntroElements() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
-    if (startScreen) startScreen.remove();
-    if (introVideo) introVideo.remove();
+    if (startScreen) startScreen.style.display = 'none';
+    if (introVideo) introVideo.style.display = 'none'; // Lúc này xong rồi mới ẩn hẳn
 }
 
 function startGame() {
@@ -159,10 +172,7 @@ function startGame() {
 
 // ================= UI FUNCTIONS =================
 function createBottomButtons() {
-    // --- THAY ĐỔI 2: ĐẨY NÚT LÊN CAO HẲN ---
-    // Cũ: 580 -> Mới: 550 (Cách đáy 90px, cực kỳ an toàn cho mọi loại màn hình)
     const btnY = 550;
-
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
@@ -173,20 +183,37 @@ function createBottomButtons() {
     });
 }
 
+// --- GIỮ NGUYÊN NÚT BẤM GRAPHICS + NEON ---
 function createSingleButton(x, y, textStr, color, onClick) {
     const btnW = 150; const btnH = 50;
     const container = this.add.container(x, y);
     const bg = this.add.graphics();
-    bg.fillStyle(color, 1); bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
-    bg.lineStyle(2, 0xffffff, 1); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
 
-    // Giữ độ nét chữ
+    let neonColor = 0xffffff;
+    if (color === 0x073f68) neonColor = 0x00ccff;
+    if (color === 0xe87121) neonColor = 0xffaa00;
+
+    // Hiệu ứng Neon
+    bg.lineStyle(8, neonColor, 0.3);
+    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 14);
+    bg.lineStyle(6, neonColor, 0.4);
+    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+
+    bg.fillStyle(color, 1);
+    bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+
+    bg.lineStyle(2, neonColor, 1);
+    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+
+    bg.lineStyle(1, 0xffffff, 0.8);
+    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+
     const text = this.add.text(0, 0, textStr, {
-        fontSize: '22px',
-        fontFamily: 'Arial',
-        fontStyle: 'bold',
-        color: '#ffffff'
+        fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5).setResolution(2);
+
+    const shadowColor = (color === 0x073f68) ? '#00ccff' : '#ffaa00';
+    text.setShadow(0, 0, shadowColor, 4, true, true);
 
     const zone = this.add.zone(0, 0, btnW, btnH).setInteractive({ useHandCursor: true });
     zone.on('pointerdown', () => {
@@ -295,8 +322,6 @@ function flipCard(card) {
     });
 }
 
-// ================= HỆ THỐNG HIỆU ỨNG RANDOM =================
-
 function playRandomEffect(scene, x, y) {
     const type = Phaser.Math.Between(1, 3);
     switch (type) {
@@ -306,7 +331,6 @@ function playRandomEffect(scene, x, y) {
     }
 }
 
-// 1. Pháo hoa
 function createFireworkEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'flare', {
         x: x, y: y,
@@ -323,7 +347,6 @@ function createFireworkEffect(scene, x, y) {
     scene.time.delayedCall(700, () => particles.destroy());
 }
 
-// 2. Galaxy
 function createGalaxyEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'star', {
         x: x, y: y,
@@ -341,7 +364,6 @@ function createGalaxyEffect(scene, x, y) {
     scene.time.delayedCall(900, () => particles.destroy());
 }
 
-// 3. Fountain
 function createFountainEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'flare', {
         x: x, y: y,
@@ -358,7 +380,6 @@ function createFountainEffect(scene, x, y) {
     scene.time.delayedCall(800, () => particles.destroy());
 }
 
-// ================= CÁC HÀM CŨ =================
 function flipBack(card) {
     if (!card.scene) return;
     flipAnimation(card.scene, card, card.getData('baseTexture'), card.getData('baseFrame'), () => card.setData('flipped', false));
@@ -402,4 +423,3 @@ function useHint() {
         }
     }
 }
-
