@@ -5,11 +5,8 @@ const config = {
     height: 640,
     parent: document.body,
     transparent: true,
-    dom: { createContainer: false }, // Giữ nguyên false
-
-    // Giữ độ nét cao cho màn hình điện thoại
+    dom: { createContainer: false },
     resolution: window.devicePixelRatio,
-
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -46,6 +43,7 @@ let timerEvent;
 let timeBarGfx;
 let hintLeft = MAX_HINT;
 let hintText;
+let consecutiveWins = 0;
 
 // ================= PRELOAD =================
 function preload() {
@@ -53,7 +51,6 @@ function preload() {
     for (let i = 1; i <= 16; i++) {
         this.load.image(`food${i}`, `assets/food${i}.png`);
     }
-
     this.load.audio('bgm', 'assets/bgm.mp3');
     this.load.audio('match', 'assets/match.mp3');
     this.load.audio('wrong', 'assets/wrong.mp3');
@@ -85,8 +82,29 @@ function createFallbackTexture(scene) {
     }
 }
 
-// ================= CREATE =================
-function create() {
+// ================= CREATE (FIX LỖI KẸT NÚT) =================
+// Nhận tham số data để biết có phải là Restart không
+function create(data) {
+
+    // --- 1. RESET TOÀN BỘ TRẠNG THÁI HTML (QUAN TRỌNG) ---
+    // Đảm bảo không có video hay màn hình nào đang che game
+    const comboVideo = document.getElementById('combo-video');
+    const introVideo = document.getElementById('intro-video');
+    const startScreen = document.getElementById('start-screen');
+
+    if (comboVideo) {
+        comboVideo.style.opacity = '0';
+        comboVideo.style.pointerEvents = 'none';
+        comboVideo.pause();
+        comboVideo.currentTime = 0;
+    }
+    if (introVideo) {
+        introVideo.style.opacity = '0';
+        introVideo.style.pointerEvents = 'none';
+        introVideo.pause();
+    }
+    // ----------------------------------------------------
+
     if (!this.textures.exists('flare')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff); gfx.fillCircle(8, 8, 8);
@@ -100,6 +118,7 @@ function create() {
     }
 
     first = null; second = null; matchedPairs = 0; score = 0; timeLeft = TOTAL_TIME; hintLeft = MAX_HINT;
+    consecutiveWins = 0;
     lock = true;
 
     createUI.call(this);
@@ -107,40 +126,45 @@ function create() {
     prepareBackFrames(this);
     createBoard.call(this);
 
-    // GỌI HÀM VIDEO (ĐÃ ĐƯỢC TỐI ƯU)
-    handleStartScreen.call(this);
+    // --- KIỂM TRA: NẾU LÀ RESTART THÌ VÀO GAME LUÔN ---
+    if (data && data.isRestart) {
+        if (startScreen) startScreen.style.display = 'none'; // Ẩn nút Start
+        startGame.call(this); // Vào chơi luôn, không xem intro nữa
+    } else {
+        // Lần đầu vào web thì mới hiện intro
+        handleStartScreen.call(this);
+    }
 }
 
-// --- FIX LỖI LAG VIDEO: DÙNG OPACITY ---
+// --- LOGIC START SCREEN & INTRO ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
+    const comboVideo = document.getElementById('combo-video');
+
+    if (comboVideo) comboVideo.load(); // Load sẵn video combo
 
     if (!startScreen || !introVideo) { startGame.call(this); return; }
 
-    // BẮT BUỘC: Ra lệnh cho trình duyệt tải video ngay lập tức
     introVideo.load();
 
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
         startBtn.onclick = () => {
-            // Ẩn màn hình chờ
             startScreen.style.display = 'none';
 
-            // Hiện video NGAY LẬP TỨC bằng cách đổi Opacity và Z-Index
-            // Vì video đã nằm đó sẵn (không phải display:none) nên sẽ ko bị trễ
+            // Hiện video intro
+            introVideo.style.display = 'block'; // Fallback
             introVideo.style.opacity = '1';
-            introVideo.style.zIndex = '20000'; // Đưa lên trên cùng
+            introVideo.style.zIndex = '20000';
             introVideo.style.pointerEvents = 'auto';
 
             introVideo.currentTime = 0;
             introVideo.muted = false;
 
-            // Chạy video
             var playPromise = introVideo.play();
             if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("Auto-play bị chặn, vào game luôn.");
+                playPromise.catch(() => {
                     removeIntroElements();
                     startGame.call(this);
                 });
@@ -157,12 +181,17 @@ function handleStartScreen() {
 function removeIntroElements() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
+
+    // Ẩn hoàn toàn để không che game
     if (startScreen) startScreen.style.display = 'none';
-    if (introVideo) introVideo.style.display = 'none'; // Lúc này xong rồi mới ẩn hẳn
+    if (introVideo) {
+        introVideo.style.opacity = '0';
+        introVideo.style.pointerEvents = 'none';
+    }
 }
 
 function startGame() {
-    lock = false;
+    lock = false; // QUAN TRỌNG: Mở khóa để chơi được
     if (!this.sound.get('bgm')) this.sound.play('bgm', { loop: true, volume: 0.5 });
     else if (!this.sound.get('bgm').isPlaying) this.sound.play('bgm', { loop: true, volume: 0.5 });
 
@@ -173,51 +202,43 @@ function startGame() {
 // ================= UI FUNCTIONS =================
 function createBottomButtons() {
     const btnY = 550;
+
+    // Sửa nút CHƠI LẠI: Truyền tham số isRestart = true
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
-        this.scene.restart();
+
+        // --- FIX LỖI: RESTART VÀO GAME NGAY ---
+        this.scene.restart({ isRestart: true });
     });
+
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
         window.open('https://ahafood.ai', '_blank');
     });
 }
 
-// --- GIỮ NGUYÊN NÚT BẤM GRAPHICS + NEON ---
 function createSingleButton(x, y, textStr, color, onClick) {
     const btnW = 150; const btnH = 50;
     const container = this.add.container(x, y);
     const bg = this.add.graphics();
+    let neonColor = (color === 0x073f68) ? 0x00ccff : 0xffaa00;
 
-    let neonColor = 0xffffff;
-    if (color === 0x073f68) neonColor = 0x00ccff;
-    if (color === 0xe87121) neonColor = 0xffaa00;
-
-    // Hiệu ứng Neon
-    bg.lineStyle(8, neonColor, 0.3);
-    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 14);
-    bg.lineStyle(6, neonColor, 0.4);
-    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
-
-    bg.fillStyle(color, 1);
-    bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
-
-    bg.lineStyle(2, neonColor, 1);
-    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
-
-    bg.lineStyle(1, 0xffffff, 0.8);
-    bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.lineStyle(8, neonColor, 0.3); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 14);
+    bg.lineStyle(6, neonColor, 0.4); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.fillStyle(color, 1); bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.lineStyle(2, neonColor, 1); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.lineStyle(1, 0xffffff, 0.8); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
 
     const text = this.add.text(0, 0, textStr, {
         fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5).setResolution(2);
 
     const shadowColor = (color === 0x073f68) ? '#00ccff' : '#ffaa00';
-    text.setShadow(0, 0, shadowColor, 4, true, true);
+    text.setShadow(0, 0, shadowColor, 5, true, true);
 
     const zone = this.add.zone(0, 0, btnW, btnH).setInteractive({ useHandCursor: true });
     zone.on('pointerdown', () => {
-        this.tweens.add({ targets: container, scaleX: 0.9, scaleY: 0.9, duration: 100, yoyo: true, onComplete: onClick });
+        this.tweens.add({ targets: container, scaleX: 0.95, scaleY: 0.95, duration: 50, yoyo: true, onComplete: onClick });
     });
     container.add([bg, text, zone]);
 }
@@ -281,8 +302,7 @@ function updateTime() {
         timeLeft--; drawTimeBar(this);
     } else {
         timerEvent.remove(); lock = true;
-        this.add.text(180, 320, 'GAME OVER', { fontSize: '40px', color: '#ff0000', backgroundColor: '#000', padding: { x: 10, y: 10 } })
-            .setOrigin(0.5).setDepth(100).setResolution(2);
+        this.add.text(180, 320, 'GAME OVER', { fontSize: '40px', color: '#ff0000', backgroundColor: '#000', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(100).setResolution(2);
         this.sound.stopAll();
     }
 }
@@ -299,27 +319,67 @@ function flipCard(card) {
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
 
-            this.cameras.main.shake(200, 0.005);
+            consecutiveWins++; // Tăng Combo
 
+            this.cameras.main.shake(200, 0.005);
             playRandomEffect(this, first.x, first.y);
             playRandomEffect(this, second.x, second.y);
 
             first.setVisible(false);
             second.setVisible(false);
-
             removePair(first, second);
+
+            // --- KIỂM TRA COMBO 3 ---
+            if (consecutiveWins === 3) {
+                playComboVideo(this);
+                consecutiveWins = 0;
+            } else {
+                resetTurn(); // Mở khóa nếu ko có combo
+            }
+
             if (matchedPairs === 15) {
-                this.add.text(180, 320, 'YOU WIN!', { fontSize: '40px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 10 } })
-                    .setOrigin(0.5).setDepth(100).setResolution(2);
+                this.add.text(180, 320, 'YOU WIN!', { fontSize: '40px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(100).setResolution(2);
                 timerEvent.remove();
                 this.sound.stopAll();
             }
-            resetTurn();
+
         } else {
             this.sound.play('wrong');
+            consecutiveWins = 0; // Reset Combo
             this.time.delayedCall(800, () => { flipBack(first); flipBack(second); resetTurn(); });
         }
     });
+}
+
+// --- HÀM PHÁT VIDEO COMBO ---
+function playComboVideo(scene) {
+    const comboVideo = document.getElementById('combo-video');
+    if (!comboVideo) { resetTurn(); return; }
+
+    if (timerEvent) timerEvent.paused = true;
+
+    // Hiện video
+    comboVideo.style.opacity = '1';
+    comboVideo.style.pointerEvents = 'auto'; // Chặn click xuống game
+    comboVideo.currentTime = 0;
+
+    comboVideo.play().then(() => { }).catch(e => {
+        console.error("Lỗi video combo", e);
+        closeComboVideo(scene);
+    });
+
+    comboVideo.onended = () => { closeComboVideo(scene); };
+}
+
+function closeComboVideo(scene) {
+    const comboVideo = document.getElementById('combo-video');
+    if (comboVideo) {
+        comboVideo.style.opacity = '0';
+        comboVideo.style.pointerEvents = 'none'; // Trả lại click cho game
+    }
+
+    if (timerEvent) timerEvent.paused = false;
+    resetTurn(); // Mở khóa game
 }
 
 function playRandomEffect(scene, x, y) {
