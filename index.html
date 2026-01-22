@@ -11,12 +11,11 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            /* Ẩn thanh cuộn */
             background-color: #000;
-            /* Màu nền dự phòng */
+            font-family: Arial, sans-serif;
         }
 
-        /* CSS CHO VIDEO NỀN */
+        /* VIDEO NỀN */
         #bg-video {
             position: fixed;
             top: 0;
@@ -24,12 +23,96 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            /* Quan trọng: Giữ tỷ lệ, cắt phần thừa, không méo hình */
             z-index: -1;
-            /* Nằm dưới cùng */
         }
 
-        /* Canvas game nằm đè lên trên */
+        /* VIDEO INTRO */
+        #intro-video {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 9999;
+            background: #000;
+        }
+
+        /* MÀN HÌNH CHỜ (CLICK TO START) */
+        #start-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            /* Nền đen mờ nhẹ hơn chút cho thấy nền đẹp */
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            cursor: pointer;
+            /* Con trỏ tay khi di chuột vào vùng này */
+        }
+
+        /* CÁI TAY NHẤP NHÁY */
+        #start-btn {
+            width: 100px;
+            /* Kích thước tay, chỉnh to nhỏ ở đây */
+            height: auto;
+            background: transparent;
+            /* Không màu nền */
+            border: none;
+            /* Không viền */
+            cursor: pointer;
+
+            /* Hiệu ứng hoạt hình */
+            animation: tap-hand 1.2s infinite ease-in-out;
+        }
+
+        /* Dòng chữ hướng dẫn nhỏ bên dưới (Tùy chọn) */
+        .tap-text {
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+            text-shadow: 0 0 5px black;
+            animation: fade-text 1.2s infinite ease-in-out;
+        }
+
+        /* Định nghĩa chuyển động của cái tay */
+        @keyframes tap-hand {
+            0% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(0.9) translateY(10px);
+                /* Nhấn xuống */
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fade-text {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
         canvas {
             display: block;
             margin: auto;
@@ -43,7 +126,23 @@
         <source src="background.mp4" type="video/mp4">
     </video>
 
+    <video id="intro-video" playsinline>
+        <source src="intro2.mp4" type="video/mp4">
+    </video>
+
+    <div id="start-screen">
+        <img id="start-btn" src="assets/hand.png" alt="Tap to start">
+
+        <div class="tap-text">CHẠM ĐỂ BẮT ĐẦU</div>
+    </div>
+
     <script src="game.js"></script>
+
+    <script>
+        document.getElementById('start-screen').addEventListener('click', function () {
+            document.getElementById('start-btn').click();
+        });
+    </script>
 </body>
 
 </html>
