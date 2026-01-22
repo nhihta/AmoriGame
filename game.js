@@ -169,7 +169,7 @@ function createBottomButtons() {
         this.scene.restart();
     });
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
-        window.open('https://google.com', '_blank');
+        window.open('https://ahafood.ai', '_blank');
     });
 }
 
@@ -402,3 +402,4 @@ function useHint() {
         }
     }
 }
+
