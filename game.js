@@ -4,14 +4,8 @@ const config = {
     width: 360,
     height: 640,
     parent: document.body,
-
-    transparent: true, // Nền trong suốt
-
-    // --- BẮT BUỘC: BẬT TÍNH NĂNG DOM ĐỂ DÙNG GIF ---
-    dom: {
-        createContainer: true
-    },
-
+    transparent: true,
+    dom: { createContainer: false }, // Tắt DOM vì dùng Particle nội bộ
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -55,12 +49,10 @@ function preload() {
     for (let i = 1; i <= 16; i++) {
         this.load.image(`food${i}`, `assets/food${i}.png`);
     }
+
     this.load.audio('bgm', 'assets/bgm.mp3');
     this.load.audio('match', 'assets/match.mp3');
     this.load.audio('wrong', 'assets/wrong.mp3');
-
-    // KHÔNG CẦN preload file .gif ở đây
-    // Vì ta sẽ dùng HTML tag để hiển thị nó trực tiếp
 }
 
 // ================= HELPERS: XỬ LÝ ẢNH =================
@@ -91,6 +83,27 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create() {
+    // --- TẠO CÁC HẠT (TEXTURE) CHO HIỆU ỨNG ---
+
+    // 1. Flare (Đốm sáng tròn) - Dùng cho nổ
+    if (!this.textures.exists('flare')) {
+        const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+        gfx.fillStyle(0xffffff); gfx.fillCircle(8, 8, 8);
+        gfx.generateTexture('flare', 16, 16);
+    }
+
+    // 2. Star (Hình thoi/sao) - Dùng cho hiệu ứng Magic
+    if (!this.textures.exists('star')) {
+        const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+        gfx.fillStyle(0xffffff);
+        // Vẽ hình thoi
+        gfx.beginPath();
+        gfx.moveTo(8, 0); gfx.lineTo(16, 8); gfx.lineTo(8, 16); gfx.lineTo(0, 8);
+        gfx.closePath();
+        gfx.fill();
+        gfx.generateTexture('star', 16, 16);
+    }
+
     first = null; second = null; matchedPairs = 0; score = 0; timeLeft = TOTAL_TIME; hintLeft = MAX_HINT;
     lock = true;
 
@@ -98,31 +111,36 @@ function create() {
     createBottomButtons.call(this);
     prepareBackFrames(this);
     createBoard.call(this);
+
     handleStartScreen.call(this);
 }
 
-// --- HÀM XỬ LÝ CLICK TO START ---
+// --- XỬ LÝ INTRO ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
-    const startBtn = document.getElementById('start-btn');
     const introVideo = document.getElementById('intro-video');
 
-    if (startBtn && introVideo) {
+    if (!startScreen || !introVideo) { startGame.call(this); return; }
+
+    const startBtn = document.getElementById('start-btn');
+    if (startBtn) {
         startBtn.onclick = () => {
             startScreen.style.display = 'none';
             introVideo.style.display = 'block';
             introVideo.currentTime = 0;
             introVideo.muted = false;
-            introVideo.play().catch(() => { introVideo.style.display = 'none'; startGame.call(this); });
+            introVideo.play().catch(() => { removeIntroElements(); startGame.call(this); });
         };
-        introVideo.onended = () => {
-            introVideo.style.display = 'none';
-            startGame.call(this);
-        };
-    } else {
-        if (startScreen) startScreen.style.display = 'none';
-        startGame.call(this);
     }
+
+    introVideo.onended = () => { removeIntroElements(); startGame.call(this); };
+}
+
+function removeIntroElements() {
+    const startScreen = document.getElementById('start-screen');
+    const introVideo = document.getElementById('intro-video');
+    if (startScreen) startScreen.remove();
+    if (introVideo) introVideo.remove();
 }
 
 function startGame() {
@@ -140,8 +158,6 @@ function createBottomButtons() {
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
-        const startScreen = document.getElementById('start-screen');
-        if (startScreen) startScreen.style.display = 'flex';
         this.scene.restart();
     });
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
@@ -236,13 +252,14 @@ function flipCard(card) {
         second = card; lock = true;
 
         if (first.getData('value') === second.getData('value')) {
-            // MATCH FOUND!
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
 
-            // --- THÊM HIỆU ỨNG GIF TẠI ĐÂY ---
-            playExplosion(this, first.x, first.y);
-            playExplosion(this, second.x, second.y);
+            this.cameras.main.shake(300, 0.01);
+
+            // --- GỌI HÀM RANDOM HIỆU ỨNG MỚI ---
+            playRandomEffect(this, first.x, first.y);
+            playRandomEffect(this, second.x, second.y);
 
             first.setVisible(false);
             second.setVisible(false);
@@ -261,23 +278,78 @@ function flipCard(card) {
     });
 }
 
-// --- HÀM CHẠY HIỆU ỨNG GIF (MỚI) ---
-function playExplosion(scene, x, y) {
-    // Thêm timestamp (?t=...) để bắt trình duyệt load lại file GIF từ đầu
-    // Nếu không có, GIF chỉ chạy 1 lần rồi đứng yên ở frame cuối cho các lần sau
-    const timestamp = new Date().getTime();
+// ================= HỆ THỐNG HIỆU ỨNG RANDOM =================
 
-    // Tạo phần tử DOM chứa ảnh GIF
-    const boom = scene.add.dom(x, y).createFromHTML(
-        `<img src="assets/boom.gif?t=${timestamp}" style="width: 100px; height: 100px;">`
-    );
+function playRandomEffect(scene, x, y) {
+    // Random số từ 1 đến 3
+    const type = Phaser.Math.Between(1, 3);
 
-    // Sau 1 giây (1000ms) thì xóa ảnh GIF đi
-    scene.time.delayedCall(1000, () => {
-        boom.destroy();
-    });
+    switch (type) {
+        case 1:
+            createFireworkEffect(scene, x, y);
+            break;
+        case 2:
+            createGalaxyEffect(scene, x, y);
+            break;
+        case 3:
+            createFountainEffect(scene, x, y);
+            break;
+    }
 }
 
+// 1. HIỆU ỨNG PHÁO HOA (Đỏ/Cam/Vàng - Rơi xuống)
+function createFireworkEffect(scene, x, y) {
+    const particles = scene.add.particles(0, 0, 'flare', {
+        x: x, y: y,
+        speed: { min: 100, max: 200 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 0.8, end: 0 },
+        blendMode: 'ADD',
+        lifespan: 600,
+        gravityY: 200, // Có trọng lực rơi xuống
+        quantity: 20,
+        tint: [0xff0000, 0xffa500, 0xffff00] // Đỏ - Cam - Vàng
+    });
+    particles.explode(20, x, y);
+    scene.time.delayedCall(700, () => particles.destroy());
+}
+
+// 2. HIỆU ỨNG GALAXY (Xanh/Tím - Xoay tròn)
+function createGalaxyEffect(scene, x, y) {
+    const particles = scene.add.particles(0, 0, 'star', { // Dùng texture ngôi sao
+        x: x, y: y,
+        speed: { min: 50, max: 120 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 0.6, end: 0 },
+        rotate: { start: 0, end: 360 }, // Hạt tự xoay
+        blendMode: 'SCREEN',
+        lifespan: 800,
+        gravityY: 0, // Không trọng lực
+        quantity: 15,
+        tint: [0x00ffff, 0xff00ff, 0x9b59b6] // Cyan - Tím - Hồng
+    });
+    particles.explode(15, x, y);
+    scene.time.delayedCall(900, () => particles.destroy());
+}
+
+// 3. HIỆU ỨNG FOUNTAIN (Xanh Lá/Trắng - Bắn lên trời)
+function createFountainEffect(scene, x, y) {
+    const particles = scene.add.particles(0, 0, 'flare', {
+        x: x, y: y,
+        speed: { min: 150, max: 250 },
+        angle: { min: 240, max: 300 }, // Chỉ bắn lên trên
+        scale: { start: 0.7, end: 0 },
+        blendMode: 'ADD',
+        lifespan: 700,
+        gravityY: 400, // Rơi xuống nhanh sau khi bắn lên
+        quantity: 15,
+        tint: [0x2ecc71, 0xaaffff, 0xffffff] // Xanh lá - Trắng xanh
+    });
+    particles.explode(15, x, y);
+    scene.time.delayedCall(800, () => particles.destroy());
+}
+
+// ================= CÁC HÀM CŨ =================
 function flipBack(card) {
     if (!card.scene) return;
     flipAnimation(card.scene, card, card.getData('baseTexture'), card.getData('baseFrame'), () => card.setData('flipped', false));
