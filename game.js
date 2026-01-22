@@ -4,7 +4,14 @@ const config = {
     width: 360,
     height: 640,
     parent: document.body,
-    transparent: true,
+
+    transparent: true, // Nền trong suốt
+
+    // --- BẮT BUỘC: BẬT TÍNH NĂNG DOM ĐỂ DÙNG GIF ---
+    dom: {
+        createContainer: true
+    },
+
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -32,7 +39,7 @@ const MAX_HINT = 3;
 // ================= STATE =================
 let first = null;
 let second = null;
-let lock = true; // Khóa game chờ intro
+let lock = true;
 let matchedPairs = 0;
 let score = 0;
 let scoreText;
@@ -51,6 +58,9 @@ function preload() {
     this.load.audio('bgm', 'assets/bgm.mp3');
     this.load.audio('match', 'assets/match.mp3');
     this.load.audio('wrong', 'assets/wrong.mp3');
+
+    // KHÔNG CẦN preload file .gif ở đây
+    // Vì ta sẽ dùng HTML tag để hiển thị nó trực tiếp
 }
 
 // ================= HELPERS: XỬ LÝ ẢNH =================
@@ -81,103 +91,59 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create() {
-    // Reset biến
     first = null; second = null; matchedPairs = 0; score = 0; timeLeft = TOTAL_TIME; hintLeft = MAX_HINT;
-    lock = true; // Khóa game
+    lock = true;
 
-    // Tạo giao diện game (nhưng chưa cho chơi)
     createUI.call(this);
     createBottomButtons.call(this);
     prepareBackFrames(this);
     createBoard.call(this);
-
-    // --- XỬ LÝ CLICK ĐỂ PHÁT INTRO CÓ TIẾNG ---
     handleStartScreen.call(this);
 }
 
-// --- HÀM XỬ LÝ MÀN HÌNH CHỜ & VIDEO INTRO ---
+// --- HÀM XỬ LÝ CLICK TO START ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const startBtn = document.getElementById('start-btn');
     const introVideo = document.getElementById('intro-video');
 
     if (startBtn && introVideo) {
-        // Sự kiện: Khi bấm nút "BẤM ĐỂ CHƠI"
         startBtn.onclick = () => {
-            // 1. Ẩn màn hình chờ
             startScreen.style.display = 'none';
-
-            // 2. Hiện và Phát video Intro (Lúc này đã có tương tác click -> Sẽ có tiếng)
             introVideo.style.display = 'block';
             introVideo.currentTime = 0;
-            introVideo.muted = false; // Bật tiếng
-            introVideo.volume = 1.0;  // Max volume
-
-            introVideo.play().catch(e => {
-                console.error("Lỗi phát video:", e);
-                // Nếu lỗi quá thì vào game luôn
-                introVideo.style.display = 'none';
-                startGame.call(this);
-            });
+            introVideo.muted = false;
+            introVideo.play().catch(() => { introVideo.style.display = 'none'; startGame.call(this); });
         };
-
-        // Sự kiện: Khi video chạy xong
         introVideo.onended = () => {
-            introVideo.style.display = 'none'; // Ẩn video
-            startGame.call(this); // Vào game
+            introVideo.style.display = 'none';
+            startGame.call(this);
         };
-
     } else {
-        // Nếu không tìm thấy element HTML thì vào game luôn
         if (startScreen) startScreen.style.display = 'none';
         startGame.call(this);
     }
 }
 
-// --- HÀM BẮT ĐẦU GAME CHÍNH THỨC ---
 function startGame() {
-    lock = false; // MỞ KHÓA
+    lock = false;
+    if (!this.sound.get('bgm')) this.sound.play('bgm', { loop: true, volume: 0.5 });
+    else if (!this.sound.get('bgm').isPlaying) this.sound.play('bgm', { loop: true, volume: 0.5 });
 
-    // Phát nhạc nền game
-    if (!this.sound.get('bgm')) {
-        this.sound.play('bgm', { loop: true, volume: 0.5 });
-    } else if (!this.sound.get('bgm').isPlaying) {
-        this.sound.play('bgm', { loop: true, volume: 0.5 });
-    }
-
-    // Bắt đầu đếm giờ
     if (timerEvent) timerEvent.remove();
-    timerEvent = this.time.addEvent({
-        delay: 1000,
-        callback: updateTime,
-        callbackScope: this,
-        loop: true
-    });
+    timerEvent = this.time.addEvent({ delay: 1000, callback: updateTime, callbackScope: this, loop: true });
 }
 
 // ================= UI FUNCTIONS =================
 function createBottomButtons() {
     const btnY = 580;
-
-    // Nút Chơi Lại
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
-
-        // Khi chơi lại, ta chỉ cần restart scene
-        // Lưu ý: Màn hình "Bấm để chơi" vẫn còn trong HTML, 
-        // nên khi restart nó sẽ hiện lại -> Người dùng bấm lại -> Intro chạy lại.
-        // Đây là cách dễ nhất để reset toàn bộ luồng.
-        // Nếu muốn ẩn luôn nút Start thì cần css display: none trong startGame hoặc dùng biến cờ.
-
-        // Hiện lại màn hình chờ để quy trình lặp lại đúng chuẩn
         const startScreen = document.getElementById('start-screen');
         if (startScreen) startScreen.style.display = 'flex';
-
         this.scene.restart();
     });
-
-    // Nút Đặt Món
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
         window.open('https://google.com', '_blank');
     });
@@ -268,9 +234,19 @@ function flipCard(card) {
     flipAnimation(this, card, card.getData('value'), null, () => {
         if (!first) { first = card; return; }
         second = card; lock = true;
+
         if (first.getData('value') === second.getData('value')) {
+            // MATCH FOUND!
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
+
+            // --- THÊM HIỆU ỨNG GIF TẠI ĐÂY ---
+            playExplosion(this, first.x, first.y);
+            playExplosion(this, second.x, second.y);
+
+            first.setVisible(false);
+            second.setVisible(false);
+
             removePair(first, second);
             if (matchedPairs === 15) {
                 this.add.text(180, 320, 'YOU WIN!', { fontSize: '40px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(100);
@@ -282,6 +258,23 @@ function flipCard(card) {
             this.sound.play('wrong');
             this.time.delayedCall(800, () => { flipBack(first); flipBack(second); resetTurn(); });
         }
+    });
+}
+
+// --- HÀM CHẠY HIỆU ỨNG GIF (MỚI) ---
+function playExplosion(scene, x, y) {
+    // Thêm timestamp (?t=...) để bắt trình duyệt load lại file GIF từ đầu
+    // Nếu không có, GIF chỉ chạy 1 lần rồi đứng yên ở frame cuối cho các lần sau
+    const timestamp = new Date().getTime();
+
+    // Tạo phần tử DOM chứa ảnh GIF
+    const boom = scene.add.dom(x, y).createFromHTML(
+        `<img src="assets/boom.gif?t=${timestamp}" style="width: 100px; height: 100px;">`
+    );
+
+    // Sau 1 giây (1000ms) thì xóa ảnh GIF đi
+    scene.time.delayedCall(1000, () => {
+        boom.destroy();
     });
 }
 
@@ -305,7 +298,10 @@ function flipAnimation(scene, card, texture, frame, onComplete) {
 
 function removePair(a, b) {
     a.setData('removed', true); b.setData('removed', true);
-    a.scene.tweens.add({ targets: [a, b], alpha: 0, scale: 0.1, duration: 300, onComplete: () => { a.destroy(); b.destroy(); } });
+    a.scene.time.delayedCall(500, () => {
+        if (a.active) a.destroy();
+        if (b.active) b.destroy();
+    });
 }
 
 function resetTurn() { first = null; second = null; lock = false; }
