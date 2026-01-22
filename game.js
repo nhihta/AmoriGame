@@ -255,7 +255,7 @@ function flipCard(card) {
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
 
-            this.cameras.main.shake(300, 0.01);
+            this.cameras.main.shake(300, 0.005);
 
             // --- GỌI HÀM RANDOM HIỆU ỨNG MỚI ---
             playRandomEffect(this, first.x, first.y);
@@ -392,4 +392,5 @@ function useHint() {
             }
         }
     }
+
 }
