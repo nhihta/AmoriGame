@@ -31,6 +31,13 @@ const BAR_X = 30;
 const BAR_Y = 85;
 const MAX_HINT = 3;
 
+// --- DANH SÁCH 3 VIDEO COMBO ---
+const COMBO_VIDEOS = [
+    'combo1.mp4',
+    'combo2.mp4',
+    'combo2.mp4'
+];
+
 // ================= STATE =================
 let first = null;
 let second = null;
@@ -44,6 +51,7 @@ let timeBarGfx;
 let hintLeft = MAX_HINT;
 let hintText;
 let consecutiveWins = 0;
+let currentVideoIndex = 0;
 
 // ================= PRELOAD =================
 function preload() {
@@ -82,12 +90,10 @@ function createFallbackTexture(scene) {
     }
 }
 
-// ================= CREATE (FIX LỖI KẸT NÚT) =================
-// Nhận tham số data để biết có phải là Restart không
+// ================= CREATE =================
 function create(data) {
 
-    // --- 1. RESET TOÀN BỘ TRẠNG THÁI HTML (QUAN TRỌNG) ---
-    // Đảm bảo không có video hay màn hình nào đang che game
+    // RESET HTML ELEMENTS
     const comboVideo = document.getElementById('combo-video');
     const introVideo = document.getElementById('intro-video');
     const startScreen = document.getElementById('start-screen');
@@ -103,7 +109,6 @@ function create(data) {
         introVideo.style.pointerEvents = 'none';
         introVideo.pause();
     }
-    // ----------------------------------------------------
 
     if (!this.textures.exists('flare')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
@@ -119,6 +124,7 @@ function create(data) {
 
     first = null; second = null; matchedPairs = 0; score = 0; timeLeft = TOTAL_TIME; hintLeft = MAX_HINT;
     consecutiveWins = 0;
+    currentVideoIndex = 0;
     lock = true;
 
     createUI.call(this);
@@ -126,23 +132,24 @@ function create(data) {
     prepareBackFrames(this);
     createBoard.call(this);
 
-    // --- KIỂM TRA: NẾU LÀ RESTART THÌ VÀO GAME LUÔN ---
     if (data && data.isRestart) {
-        if (startScreen) startScreen.style.display = 'none'; // Ẩn nút Start
-        startGame.call(this); // Vào chơi luôn, không xem intro nữa
+        if (startScreen) startScreen.style.display = 'none';
+        startGame.call(this);
     } else {
-        // Lần đầu vào web thì mới hiện intro
         handleStartScreen.call(this);
     }
 }
 
-// --- LOGIC START SCREEN & INTRO ---
+// --- LOGIC START SCREEN ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
-    const comboVideo = document.getElementById('combo-video');
 
-    if (comboVideo) comboVideo.load(); // Load sẵn video combo
+    const comboVideo = document.getElementById('combo-video');
+    if (comboVideo) {
+        comboVideo.src = COMBO_VIDEOS[0];
+        comboVideo.load();
+    }
 
     if (!startScreen || !introVideo) { startGame.call(this); return; }
 
@@ -152,13 +159,10 @@ function handleStartScreen() {
     if (startBtn) {
         startBtn.onclick = () => {
             startScreen.style.display = 'none';
-
-            // Hiện video intro
-            introVideo.style.display = 'block'; // Fallback
+            introVideo.style.display = 'block';
             introVideo.style.opacity = '1';
             introVideo.style.zIndex = '20000';
             introVideo.style.pointerEvents = 'auto';
-
             introVideo.currentTime = 0;
             introVideo.muted = false;
 
@@ -181,8 +185,6 @@ function handleStartScreen() {
 function removeIntroElements() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
-
-    // Ẩn hoàn toàn để không che game
     if (startScreen) startScreen.style.display = 'none';
     if (introVideo) {
         introVideo.style.opacity = '0';
@@ -191,7 +193,7 @@ function removeIntroElements() {
 }
 
 function startGame() {
-    lock = false; // QUAN TRỌNG: Mở khóa để chơi được
+    lock = false;
     if (!this.sound.get('bgm')) this.sound.play('bgm', { loop: true, volume: 0.5 });
     else if (!this.sound.get('bgm').isPlaying) this.sound.play('bgm', { loop: true, volume: 0.5 });
 
@@ -202,16 +204,11 @@ function startGame() {
 // ================= UI FUNCTIONS =================
 function createBottomButtons() {
     const btnY = 550;
-
-    // Sửa nút CHƠI LẠI: Truyền tham số isRestart = true
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
         if (this.sound.get('match')) this.sound.stopByKey('match');
         if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
-
-        // --- FIX LỖI: RESTART VÀO GAME NGAY ---
         this.scene.restart({ isRestart: true });
     });
-
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
         window.open('https://ahafood.ai', '_blank');
     });
@@ -319,7 +316,7 @@ function flipCard(card) {
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
 
-            consecutiveWins++; // Tăng Combo
+            consecutiveWins++;
 
             this.cameras.main.shake(200, 0.005);
             playRandomEffect(this, first.x, first.y);
@@ -329,12 +326,11 @@ function flipCard(card) {
             second.setVisible(false);
             removePair(first, second);
 
-            // --- KIỂM TRA COMBO 3 ---
-            if (consecutiveWins === 3) {
+            // --- SỬA Ở ĐÂY: % 2 == 0 ĐỂ 2 LẦN LÀ HIỆN VIDEO ---
+            if (consecutiveWins > 0 && consecutiveWins % 2 === 0) {
                 playComboVideo(this);
-                consecutiveWins = 0;
             } else {
-                resetTurn(); // Mở khóa nếu ko có combo
+                resetTurn();
             }
 
             if (matchedPairs === 15) {
@@ -345,41 +341,54 @@ function flipCard(card) {
 
         } else {
             this.sound.play('wrong');
-            consecutiveWins = 0; // Reset Combo
+            consecutiveWins = 0;
             this.time.delayedCall(800, () => { flipBack(first); flipBack(second); resetTurn(); });
         }
     });
 }
 
-// --- HÀM PHÁT VIDEO COMBO ---
+// --- HÀM PHÁT VIDEO COMBO (XOAY VÒNG 3 VIDEO) ---
 function playComboVideo(scene) {
     const comboVideo = document.getElementById('combo-video');
     if (!comboVideo) { resetTurn(); return; }
 
     if (timerEvent) timerEvent.paused = true;
 
-    // Hiện video
+    // Đổi video
+    comboVideo.src = COMBO_VIDEOS[currentVideoIndex];
+
+    // Tăng index, nếu quá 3 thì quay về 0
+    currentVideoIndex++;
+    if (currentVideoIndex >= COMBO_VIDEOS.length) {
+        currentVideoIndex = 0;
+    }
+
+    comboVideo.load();
     comboVideo.style.opacity = '1';
-    comboVideo.style.pointerEvents = 'auto'; // Chặn click xuống game
+    comboVideo.style.pointerEvents = 'auto';
     comboVideo.currentTime = 0;
 
-    comboVideo.play().then(() => { }).catch(e => {
+    comboVideo.play().catch(e => {
         console.error("Lỗi video combo", e);
         closeComboVideo(scene);
     });
 
-    comboVideo.onended = () => { closeComboVideo(scene); };
+    comboVideo.onended = () => {
+        closeComboVideo(scene);
+        comboVideo.onended = null;
+    };
 }
 
 function closeComboVideo(scene) {
     const comboVideo = document.getElementById('combo-video');
     if (comboVideo) {
         comboVideo.style.opacity = '0';
-        comboVideo.style.pointerEvents = 'none'; // Trả lại click cho game
+        comboVideo.style.pointerEvents = 'none';
+        comboVideo.pause();
     }
 
     if (timerEvent) timerEvent.paused = false;
-    resetTurn(); // Mở khóa game
+    resetTurn();
 }
 
 function playRandomEffect(scene, x, y) {
