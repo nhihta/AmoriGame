@@ -33,9 +33,9 @@ const MAX_HINT = 3;
 
 // --- DANH SÁCH VIDEO COMBO ---
 const COMBO_VIDEOS = [
-    'assets/combo1.mp4',
-    'assets/combo2.mp4',
-    'assets/combo3.mp4'
+    'combo1.mp4',
+    'combo2.mp4',
+    'combo1.mp4'
 ];
 
 // ================= STATE =================
@@ -523,3 +523,4 @@ function useHint() {
         }
     }
 }
+
