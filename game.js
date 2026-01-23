@@ -31,11 +31,12 @@ const BAR_X = 30;
 const BAR_Y = 85;
 const MAX_HINT = 3;
 
-// --- DANH SÁCH 3 VIDEO COMBO ---
+// --- DANH SÁCH VIDEO COMBO ---
+// Đảm bảo bạn đã có các file này trong thư mục assets
 const COMBO_VIDEOS = [
     'combo1.mp4',
     'combo2.mp4',
-    'combo2.mp4'
+    'combo3.mp4'
 ];
 
 // ================= STATE =================
@@ -92,7 +93,6 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create(data) {
-
     // RESET HTML ELEMENTS
     const comboVideo = document.getElementById('combo-video');
     const introVideo = document.getElementById('intro-video');
@@ -134,18 +134,21 @@ function create(data) {
 
     if (data && data.isRestart) {
         if (startScreen) startScreen.style.display = 'none';
+        // Khi restart, ta vẫn cần "mồi" lại video nếu cần thiết, 
+        // nhưng thường trình duyệt đã nhớ quyền từ lần trước.
         startGame.call(this);
     } else {
         handleStartScreen.call(this);
     }
 }
 
-// --- LOGIC START SCREEN ---
+// --- LOGIC START SCREEN (CÓ MỒI VIDEO ĐỂ FIX LỖI PHONE) ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
-
     const comboVideo = document.getElementById('combo-video');
+
+    // Nạp sẵn nguồn video đầu tiên
     if (comboVideo) {
         comboVideo.src = COMBO_VIDEOS[0];
         comboVideo.load();
@@ -158,6 +161,21 @@ function handleStartScreen() {
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
         startBtn.onclick = () => {
+            // --- KỸ THUẬT "MỒI" (WARM-UP) ---
+            // Kích hoạt thẻ video Combo ngay tại sự kiện click này để lấy quyền phát
+            if (comboVideo) {
+                comboVideo.muted = true; // Tắt tiếng để mồi
+                let warmUpPromise = comboVideo.play();
+                if (warmUpPromise !== undefined) {
+                    warmUpPromise.then(() => {
+                        comboVideo.pause(); // Pause ngay lập tức
+                        comboVideo.currentTime = 0;
+                        comboVideo.muted = false; // Bật lại tiếng cho lúc chơi game
+                    }).catch(e => console.log("Lỗi warm-up combo:", e));
+                }
+            }
+            // --------------------------------
+
             startScreen.style.display = 'none';
             introVideo.style.display = 'block';
             introVideo.style.opacity = '1';
@@ -326,7 +344,7 @@ function flipCard(card) {
             second.setVisible(false);
             removePair(first, second);
 
-            // --- SỬA Ở ĐÂY: % 2 == 0 ĐỂ 2 LẦN LÀ HIỆN VIDEO ---
+            // --- CHECK COMBO 2 (Sửa từ % 3 thành % 2) ---
             if (consecutiveWins > 0 && consecutiveWins % 2 === 0) {
                 playComboVideo(this);
             } else {
@@ -347,32 +365,40 @@ function flipCard(card) {
     });
 }
 
-// --- HÀM PHÁT VIDEO COMBO (XOAY VÒNG 3 VIDEO) ---
+// --- HÀM PHÁT VIDEO COMBO (FIX LỖI CHỚP TẮT TRÊN PHONE) ---
 function playComboVideo(scene) {
     const comboVideo = document.getElementById('combo-video');
     if (!comboVideo) { resetTurn(); return; }
 
     if (timerEvent) timerEvent.paused = true;
 
-    // Đổi video
+    // Đổi video theo thứ tự
     comboVideo.src = COMBO_VIDEOS[currentVideoIndex];
-
-    // Tăng index, nếu quá 3 thì quay về 0
     currentVideoIndex++;
-    if (currentVideoIndex >= COMBO_VIDEOS.length) {
-        currentVideoIndex = 0;
-    }
+    if (currentVideoIndex >= COMBO_VIDEOS.length) currentVideoIndex = 0;
 
     comboVideo.load();
     comboVideo.style.opacity = '1';
     comboVideo.style.pointerEvents = 'auto';
     comboVideo.currentTime = 0;
 
-    comboVideo.play().catch(e => {
-        console.error("Lỗi video combo", e);
-        closeComboVideo(scene);
-    });
+    // --- KHẮC PHỤC LỖI CHẶN AUTOPLAY (QUAN TRỌNG) ---
+    // Cố gắng play video có tiếng
+    let playPromise = comboVideo.play();
 
+    if (playPromise !== undefined) {
+        playPromise.catch(error => {
+            console.warn("Autoplay bị chặn, chuyển sang chế độ Muted để không bị tắt video.");
+            // NẾU BỊ CHẶN: Play video không tiếng (fallback)
+            comboVideo.muted = true;
+            comboVideo.play().catch(e => {
+                console.error("Vẫn lỗi kể cả khi muted:", e);
+                closeComboVideo(scene); // Chịu thua mới tắt
+            });
+        });
+    }
+
+    // Sự kiện 1 lần khi hết video
     comboVideo.onended = () => {
         closeComboVideo(scene);
         comboVideo.onended = null;
