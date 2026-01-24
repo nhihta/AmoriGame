@@ -5,7 +5,7 @@ const config = {
     height: 640,
     parent: document.body,
     transparent: true,
-    dom: { createContainer: false }, 
+    dom: { createContainer: false },
     resolution: window.devicePixelRatio,
     scale: {
         mode: Phaser.Scale.FIT,
@@ -31,12 +31,8 @@ const BAR_X = 30;
 const BAR_Y = 85;
 const MAX_HINT = 3;
 
-// --- DANH SÁCH VIDEO COMBO ---
-const COMBO_VIDEOS = [
-    'combo1.mp4',
-    'combo2.mp4',
-    'combo1.mp4'
-];
+// Số lượng video combo (đã khai báo trong HTML: combo-video-0, 1, 2)
+const COMBO_COUNT = 3;
 
 // ================= STATE =================
 let first = null;
@@ -50,8 +46,8 @@ let timerEvent;
 let timeBarGfx;
 let hintLeft = MAX_HINT;
 let hintText;
-let consecutiveWins = 0; 
-let currentVideoIndex = 0; 
+let consecutiveWins = 0;
+let currentVideoIndex = 0;
 
 // ================= PRELOAD =================
 function preload() {
@@ -92,23 +88,27 @@ function createFallbackTexture(scene) {
 
 // ================= CREATE =================
 function create(data) {
-    // RESET HTML ELEMENTS
-    const comboVideo = document.getElementById('combo-video');
+    // 1. RESET TOÀN BỘ VIDEO (Ẩn và dừng)
+    for (let i = 0; i < COMBO_COUNT; i++) {
+        const v = document.getElementById(`combo-video-${i}`);
+        if (v) {
+            v.style.opacity = '0';
+            v.style.pointerEvents = 'none';
+            v.pause();
+            v.currentTime = 0;
+        }
+    }
+
     const introVideo = document.getElementById('intro-video');
     const startScreen = document.getElementById('start-screen');
 
-    if(comboVideo) {
-        comboVideo.style.opacity = '0';
-        comboVideo.style.pointerEvents = 'none';
-        comboVideo.pause();
-        comboVideo.currentTime = 0;
-    }
-    if(introVideo) {
+    if (introVideo) {
         introVideo.style.opacity = '0';
         introVideo.style.pointerEvents = 'none';
         introVideo.pause();
     }
 
+    // 2. SETUP PHASER
     if (!this.textures.exists('flare')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
         gfx.fillStyle(0xffffff); gfx.fillCircle(8, 8, 8);
@@ -116,59 +116,59 @@ function create(data) {
     }
     if (!this.textures.exists('star')) {
         const gfx = this.make.graphics({ x: 0, y: 0, add: false });
-        gfx.fillStyle(0xffffff); 
+        gfx.fillStyle(0xffffff);
         gfx.beginPath(); gfx.moveTo(8, 0); gfx.lineTo(16, 8); gfx.lineTo(8, 16); gfx.lineTo(0, 8); gfx.closePath(); gfx.fill();
         gfx.generateTexture('star', 16, 16);
     }
 
     first = null; second = null; matchedPairs = 0; score = 0; timeLeft = TOTAL_TIME; hintLeft = MAX_HINT;
-    consecutiveWins = 0; 
-    currentVideoIndex = 0; 
-    lock = true; 
+    consecutiveWins = 0;
+    currentVideoIndex = 0;
+    lock = true;
 
     createUI.call(this);
-    createBottomButtons.call(this); // Gọi hàm tạo nút mới đã fix lỗi
+    createBottomButtons.call(this);
     prepareBackFrames(this);
     createBoard.call(this);
-    
+
     if (data && data.isRestart) {
-        if(startScreen) startScreen.style.display = 'none';
+        if (startScreen) startScreen.style.display = 'none';
         startGame.call(this);
     } else {
         handleStartScreen.call(this);
     }
 }
 
-// --- LOGIC START SCREEN ---
+// --- LOGIC START SCREEN & MỒI VIDEO ---
 function handleStartScreen() {
     const startScreen = document.getElementById('start-screen');
     const introVideo = document.getElementById('intro-video');
-    const comboVideo = document.getElementById('combo-video');
-
-    if(comboVideo) {
-        comboVideo.src = COMBO_VIDEOS[0];
-        comboVideo.load();
-    }
 
     if (!startScreen || !introVideo) { startGame.call(this); return; }
-    
+
     introVideo.load();
 
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
         startBtn.onclick = () => {
-            // MỒI VIDEO COMBO
-            if (comboVideo) {
-                comboVideo.muted = true;
-                let warmUpPromise = comboVideo.play();
-                if (warmUpPromise !== undefined) {
-                    warmUpPromise.then(() => {
-                        comboVideo.pause();
-                        comboVideo.currentTime = 0;
-                        comboVideo.muted = false; 
-                    }).catch(e => console.log("Lỗi warm-up combo:", e));
+
+            // --- KỸ THUẬT QUAN TRỌNG: MỒI TẤT CẢ VIDEO COMBO ---
+            // Duyệt qua tất cả 3 video, bật tiếng, play rồi pause ngay lập tức
+            for (let i = 0; i < COMBO_COUNT; i++) {
+                const v = document.getElementById(`combo-video-${i}`);
+                if (v) {
+                    v.muted = false; // Bắt buộc bật tiếng ở đây
+                    // Cố gắng play
+                    let p = v.play();
+                    if (p !== undefined) {
+                        p.then(() => {
+                            v.pause(); // Dừng ngay
+                            v.currentTime = 0;
+                        }).catch(e => console.log(`Lỗi warm-up video ${i}:`, e));
+                    }
                 }
             }
+            // ---------------------------------------------------
 
             startScreen.style.display = 'none';
             introVideo.style.display = 'block';
@@ -176,21 +176,21 @@ function handleStartScreen() {
             introVideo.style.zIndex = '20000';
             introVideo.style.pointerEvents = 'auto';
             introVideo.currentTime = 0;
-            introVideo.muted = false; 
-            
+            introVideo.muted = false;
+
             var playPromise = introVideo.play();
             if (playPromise !== undefined) {
                 playPromise.catch(() => {
-                    removeIntroElements(); 
-                    startGame.call(this); 
+                    removeIntroElements();
+                    startGame.call(this);
                 });
             }
         };
     }
 
-    introVideo.onended = () => { 
-        removeIntroElements(); 
-        startGame.call(this); 
+    introVideo.onended = () => {
+        removeIntroElements();
+        startGame.call(this);
     };
 }
 
@@ -208,31 +208,25 @@ function startGame() {
     lock = false;
     if (!this.sound.get('bgm')) this.sound.play('bgm', { loop: true, volume: 0.5 });
     else if (!this.sound.get('bgm').isPlaying) this.sound.play('bgm', { loop: true, volume: 0.5 });
-    
+
     if (timerEvent) timerEvent.remove();
     timerEvent = this.time.addEvent({ delay: 1000, callback: updateTime, callbackScope: this, loop: true });
 }
 
-// ================= UI FUNCTIONS (ĐÃ SỬA LỖI NÚT BẤM TRÊN MOBILE) =================
+// ================= UI FUNCTIONS =================
 
 function createBottomButtons() {
     const btnY = 550;
-    
-    // Nút CHƠI LẠI:
-    // Cần reset game, nên ta dùng delayedCall 100ms để kịp thấy nút nhún xuống rồi mới reset
+
     createSingleButton.call(this, 95, btnY, 'Chơi Lại', 0x073f68, () => {
-        if(this.sound.get('match')) this.sound.stopByKey('match');
-        if(this.sound.get('wrong')) this.sound.stopByKey('wrong');
-        
-        this.time.delayedCall(100, () => {
-            this.scene.restart({ isRestart: true }); 
-        });
+        if (this.sound.get('match')) this.sound.stopByKey('match');
+        if (this.sound.get('wrong')) this.sound.stopByKey('wrong');
+
+        this.scene.restart({ isRestart: true });
     });
-    
-    // Nút ĐẶT MÓN:
-    // QUAN TRỌNG: Không được dùng delay. Phải mở link ngay lập tức khi bấm.
+
     createSingleButton.call(this, 265, btnY, 'Đặt Món', 0xe87121, () => {
-        window.open('https://ahafood.ai', '_blank');
+        window.location.href = 'https://ahafood.ai';
     });
 }
 
@@ -242,30 +236,32 @@ function createSingleButton(x, y, textStr, color, onClick) {
     const bg = this.add.graphics();
     let neonColor = (color === 0x073f68) ? 0x00ccff : 0xffaa00;
 
-    // Vẽ Neon
-    bg.lineStyle(8, neonColor, 0.3); bg.strokeRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 14);
-    bg.lineStyle(6, neonColor, 0.4); bg.strokeRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 12);
-    bg.fillStyle(color, 1); bg.fillRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 12);
-    bg.lineStyle(2, neonColor, 1); bg.strokeRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 12);
-    bg.lineStyle(1, 0xffffff, 0.8); bg.strokeRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 12);
+    bg.lineStyle(8, neonColor, 0.3); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 14);
+    bg.lineStyle(6, neonColor, 0.4); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.fillStyle(color, 1); bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.lineStyle(2, neonColor, 1); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
+    bg.lineStyle(1, 0xffffff, 0.8); bg.strokeRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 12);
 
-    const text = this.add.text(0, 0, textStr, { 
-        fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff' 
+    const text = this.add.text(0, 0, textStr, {
+        fontSize: '22px', fontFamily: 'Arial', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5).setResolution(2);
-    
+
     const shadowColor = (color === 0x073f68) ? '#00ccff' : '#ffaa00';
     text.setShadow(0, 0, shadowColor, 5, true, true);
 
     const zone = this.add.zone(0, 0, btnW, btnH).setInteractive({ useHandCursor: true });
-    
+
     zone.on('pointerdown', () => {
-        // 1. CHẠY HIỆU ỨNG HÌNH ẢNH (Animation nhún)
-        this.tweens.add({ targets: container, scaleX: 0.95, scaleY: 0.95, duration: 50, yoyo: true });
-        
-        // 2. CHẠY LOGIC NGAY LẬP TỨC (QUAN TRỌNG CHO MOBILE)
-        // Code cũ để onClick trong onComplete -> Bị trình duyệt chặn
-        // Code mới gọi luôn ở đây -> Trình duyệt cho phép mở link
+        this.tweens.add({ targets: container, scaleX: 0.9, scaleY: 0.9, duration: 50 });
+    });
+
+    zone.on('pointerup', () => {
+        this.tweens.add({ targets: container, scaleX: 1, scaleY: 1, duration: 50 });
         if (onClick) onClick();
+    });
+
+    zone.on('pointerout', () => {
+        this.tweens.add({ targets: container, scaleX: 1, scaleY: 1, duration: 50 });
     });
 
     container.add([bg, text, zone]);
@@ -342,13 +338,12 @@ function flipCard(card) {
     flipAnimation(this, card, card.getData('value'), null, () => {
         if (!first) { first = card; return; }
         second = card; lock = true;
-        
+
         if (first.getData('value') === second.getData('value')) {
             this.sound.play('match');
             score += 10; matchedPairs++; scoreText.setText(score);
-            
+
             consecutiveWins++;
-            
             this.cameras.main.shake(200, 0.005);
             playRandomEffect(this, first.x, first.y);
             playRandomEffect(this, second.x, second.y);
@@ -357,11 +352,11 @@ function flipCard(card) {
             second.setVisible(false);
             removePair(first, second);
 
-            // COMBO 2
+            // COMBO 2 LẦN
             if (consecutiveWins > 0 && consecutiveWins % 2 === 0) {
                 playComboVideo(this);
             } else {
-                resetTurn(); 
+                resetTurn();
             }
 
             if (matchedPairs === 15) {
@@ -369,62 +364,66 @@ function flipCard(card) {
                 timerEvent.remove();
                 this.sound.stopAll();
             }
-            
+
         } else {
             this.sound.play('wrong');
-            consecutiveWins = 0; 
+            consecutiveWins = 0;
             this.time.delayedCall(800, () => { flipBack(first); flipBack(second); resetTurn(); });
         }
     });
 }
 
+// --- HÀM PLAY COMBO VIDEO (PHIÊN BẢN 3 THẺ HTML) ---
 function playComboVideo(scene) {
-    const comboVideo = document.getElementById('combo-video');
+    // 1. Chọn đúng thẻ video theo thứ tự
+    const videoId = `combo-video-${currentVideoIndex}`;
+    const comboVideo = document.getElementById(videoId);
+
     if (!comboVideo) { resetTurn(); return; }
 
     if (timerEvent) timerEvent.paused = true;
-    
-    comboVideo.src = COMBO_VIDEOS[currentVideoIndex];
-    currentVideoIndex++;
-    if (currentVideoIndex >= COMBO_VIDEOS.length) currentVideoIndex = 0;
 
-    comboVideo.load();
+    // 2. Tính toán index tiếp theo
+    currentVideoIndex++;
+    if (currentVideoIndex >= COMBO_COUNT) currentVideoIndex = 0;
+
+    // 3. Hiện và Play
     comboVideo.style.opacity = '1';
-    comboVideo.style.pointerEvents = 'auto'; 
+    comboVideo.style.pointerEvents = 'auto';
     comboVideo.currentTime = 0;
-    
+    // Đảm bảo không bị muted
+    comboVideo.muted = false;
+
     let playPromise = comboVideo.play();
     if (playPromise !== undefined) {
         playPromise.catch(error => {
-            console.warn("Autoplay bị chặn, chuyển sang Muted");
-            comboVideo.muted = true;
-            comboVideo.play().catch(e => {
-                closeComboVideo(scene);
-            });
+            console.error("Vẫn bị chặn tiếng, đành play muted", error);
+            comboVideo.muted = true; // Fallback cuối cùng
+            comboVideo.play();
         });
     }
 
-    comboVideo.onended = () => { 
-        closeComboVideo(scene); 
-        comboVideo.onended = null;
+    // Sự kiện kết thúc (Chỉ gán 1 lần)
+    comboVideo.onended = () => {
+        closeComboVideo(scene, comboVideo);
+        comboVideo.onended = null; // Clear sự kiện
     };
 }
 
-function closeComboVideo(scene) {
-    const comboVideo = document.getElementById('combo-video');
-    if (comboVideo) {
-        comboVideo.style.opacity = '0';
-        comboVideo.style.pointerEvents = 'none';
-        comboVideo.pause();
+function closeComboVideo(scene, videoElement) {
+    if (videoElement) {
+        videoElement.style.opacity = '0';
+        videoElement.style.pointerEvents = 'none';
+        videoElement.pause();
     }
-    
+
     if (timerEvent) timerEvent.paused = false;
-    resetTurn(); 
+    resetTurn();
 }
 
 function playRandomEffect(scene, x, y) {
     const type = Phaser.Math.Between(1, 3);
-    switch(type) {
+    switch (type) {
         case 1: createFireworkEffect(scene, x, y); break;
         case 2: createGalaxyEffect(scene, x, y); break;
         case 3: createFountainEffect(scene, x, y); break;
@@ -439,26 +438,26 @@ function createFireworkEffect(scene, x, y) {
         scale: { start: 0.8, end: 0 },
         blendMode: 'ADD',
         lifespan: 600,
-        gravityY: 200, 
+        gravityY: 200,
         quantity: 20,
-        tint: [ 0xff0000, 0xffa500, 0xffff00 ] 
+        tint: [0xff0000, 0xffa500, 0xffff00]
     });
     particles.explode(20, x, y);
     scene.time.delayedCall(700, () => particles.destroy());
 }
 
 function createGalaxyEffect(scene, x, y) {
-    const particles = scene.add.particles(0, 0, 'star', { 
+    const particles = scene.add.particles(0, 0, 'star', {
         x: x, y: y,
         speed: { min: 50, max: 120 },
         angle: { min: 0, max: 360 },
         scale: { start: 0.6, end: 0 },
-        rotate: { start: 0, end: 360 }, 
+        rotate: { start: 0, end: 360 },
         blendMode: 'SCREEN',
         lifespan: 800,
-        gravityY: 0, 
+        gravityY: 0,
         quantity: 15,
-        tint: [ 0x00ffff, 0xff00ff, 0x9b59b6 ] 
+        tint: [0x00ffff, 0xff00ff, 0x9b59b6]
     });
     particles.explode(15, x, y);
     scene.time.delayedCall(900, () => particles.destroy());
@@ -468,13 +467,13 @@ function createFountainEffect(scene, x, y) {
     const particles = scene.add.particles(0, 0, 'flare', {
         x: x, y: y,
         speed: { min: 150, max: 250 },
-        angle: { min: 240, max: 300 }, 
+        angle: { min: 240, max: 300 },
         scale: { start: 0.7, end: 0 },
         blendMode: 'ADD',
         lifespan: 700,
-        gravityY: 400, 
+        gravityY: 400,
         quantity: 15,
-        tint: [ 0x2ecc71, 0xaaffff, 0xffffff ] 
+        tint: [0x2ecc71, 0xaaffff, 0xffffff]
     });
     particles.explode(15, x, y);
     scene.time.delayedCall(800, () => particles.destroy());
@@ -501,8 +500,8 @@ function flipAnimation(scene, card, texture, frame, onComplete) {
 function removePair(a, b) {
     a.setData('removed', true); b.setData('removed', true);
     a.scene.time.delayedCall(500, () => {
-        if(a.active) a.destroy();
-        if(b.active) b.destroy();
+        if (a.active) a.destroy();
+        if (b.active) b.destroy();
     });
 }
 
@@ -523,4 +522,3 @@ function useHint() {
         }
     }
 }
-
